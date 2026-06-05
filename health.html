@@ -1539,10 +1539,13 @@ document.addEventListener('DOMContentLoaded', function () {
   const WHOOP_API      = 'https://api.prod.whoop.com/developer/v1';
   const WHOOP_AUTH_URL = 'https://api.prod.whoop.com/oauth/oauth2/auth';
 
+  const WHOOP_DEFAULT_CLIENT_ID = 'b61ab5c8-3f09-41b9-8e06-09ae9b82349b';
+  const WHOOP_DEFAULT_PROXY_URL = '/api/whoop-token';
+
   function getCfg() {
     return {
-      clientId: localStorage.getItem('whoop_cfg_clientId') || '',
-      proxyUrl:  localStorage.getItem('whoop_cfg_proxyUrl')  || ''
+      clientId: localStorage.getItem('whoop_cfg_clientId') || WHOOP_DEFAULT_CLIENT_ID,
+      proxyUrl:  localStorage.getItem('whoop_cfg_proxyUrl')  || WHOOP_DEFAULT_PROXY_URL
     };
   }
 
