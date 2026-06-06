@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#050506">
+<meta name="color-scheme" content="dark">
+<title>Stress · Dashboard</title>
+<script src="lock.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="sync.js" defer></script>
+<script src="topbar.js" defer></script>
+<style>
+:root {
+  --bg: #050506;
+  --bg-card: rgba(255, 255, 255, 0.04);
+  --bg-secondary: rgba(255, 255, 255, 0.035);
+  --border: rgba(255, 255, 255, 0.06);
+  --border-soft: rgba(255, 255, 255, 0.04);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --text-primary: #FAFAFA;
+  --text-secondary: #B8B6B0;
+  --text-tertiary: #76746E;
+  --text-quaternary: #4D4B47;
+  --accent: #1D9E75;
+  --accent-glow: rgba(29, 158, 117, 0.35);
+  --warning: #F2C063;
+  --danger: #FF8A8A;
+  --success: #6BE3A4;
+  --font: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text-secondary); font-family: var(--font); font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+body { min-height: 100vh; position: relative; overflow-x: hidden; }
+
+body::before {
+  content: ''; position: fixed; inset: 0;
+  background:
+    radial-gradient(60% 50% at 82% 14%, rgba(224, 118, 88, 0.16) 0%, transparent 60%),
+    radial-gradient(50% 40% at 18% 90%, rgba(180, 180, 200, 0.06) 0%, transparent 60%);
+  filter: blur(40px); pointer-events: none; z-index: 0;
+  animation: drift 36s ease-in-out infinite alternate;
+}
+body::after {
+  content: ''; position: fixed; inset: 0;
+  background-image: radial-gradient(rgba(255,255,255,0.014) 1px, transparent 1px);
+  background-size: 3px 3px; pointer-events: none; z-index: 1;
+}
+@keyframes drift { 0% { transform: translate(0,0); } 100% { transform: translate(-2%, 2%); } }
+
+main {
+  position: relative; z-index: 2;
+  max-width: 720px; margin: 0 auto;
+  padding: max(56px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) 100px max(20px, env(safe-area-inset-left));
+}
+
+.dash-title {
+  font-size: 30px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1;
+  margin: 0 2px 28px;
+  background: linear-gradient(135deg, #FAFAFA 0%, rgba(250,250,250,0.55) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+
+.section-title {
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-tertiary);
+  margin: 0 4px 14px;
+  display: flex; align-items: center; gap: 12px;
+}
+.section-title::before { content: '≡'; font-size: 14px; opacity: 0.5; }
+
+.card {
+  background: var(--bg-card); border-radius: 18px; padding: 22px;
+  backdrop-filter: blur(24px) saturate(1.2); -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  box-shadow: 0 1px 0 0 rgba(255,255,255,0.06) inset, 0 12px 40px rgba(0,0,0,0.45);
+  margin-bottom: 14px;
+}
+
+/* ── Disconnected ── */
+.st-disc { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 32px 16px; gap: 6px; }
+.st-disc-icon { font-size: 40px; margin-bottom: 10px; filter: grayscale(0.4); }
+.st-disc-title { font-size: 20px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em; }
+.st-disc-sub { font-size: 13px; color: var(--text-tertiary); max-width: 260px; line-height: 1.5; margin-bottom: 18px; }
+.st-connect-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 12px 22px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.85);
+  background: linear-gradient(180deg, #FFFFFF, #E8E5DD);
+  color: #0A0A0B; font-family: inherit; font-size: 13.5px; font-weight: 700;
+  cursor: pointer; transition: transform 0.12s;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.55), 0 6px 20px rgba(0,0,0,0.45);
+}
+.st-connect-btn:hover { transform: translateY(-1px); }
+
+/* ── Top bar ── */
+.st-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+.st-brand { display: inline-flex; align-items: center; gap: 8px; }
+.st-brand-mark { width: 22px; height: 22px; border-radius: 50%; background: #FFF; color: #0A0A0B; font-weight: 900; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; letter-spacing: -0.04em; box-shadow: 0 0 12px rgba(255,255,255,0.20); }
+.st-brand-text { font-weight: 800; font-size: 13px; letter-spacing: 0.18em; color: var(--text-primary); }
+.st-actions { display: flex; align-items: center; gap: 8px; }
+.st-refresh { width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.4s, background 0.18s; }
+.st-refresh:hover { background: rgba(255,255,255,0.08); }
+.st-refresh.spin { transform: rotate(360deg); }
+.st-disconnect { background: transparent; border: 1px solid var(--border); color: var(--text-tertiary); padding: 5px 11px; border-radius: 999px; cursor: pointer; font-family: inherit; font-size: 11px; letter-spacing: 0.04em; transition: color 0.15s, border-color 0.15s; }
+.st-disconnect:hover { color: var(--text-secondary); border-color: rgba(255,255,255,0.20); }
+.st-updated { font-size: 11px; color: var(--text-quaternary); font-family: var(--font-mono); }
+
+/* ── Recovery pill row ── */
+.st-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+.st-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border-radius: 999px; font-size: 11px; font-weight: 700;
+  border: 1px solid; letter-spacing: 0.06em;
+  font-family: var(--font-mono);
+}
+.st-pill.green  { color: var(--success); border-color: rgba(107,227,164,0.35); background: rgba(107,227,164,0.08); }
+.st-pill.yellow { color: var(--warning); border-color: rgba(242,192,99,0.35);  background: rgba(242,192,99,0.08); }
+.st-pill.red    { color: var(--danger);  border-color: rgba(255,138,138,0.35); background: rgba(255,138,138,0.08); }
+.st-pill.grey   { color: var(--text-tertiary); border-color: var(--border); background: transparent; }
+.st-pill-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.st-pill.green  .st-pill-dot { background: var(--success); box-shadow: 0 0 7px rgba(107,227,164,0.6); }
+.st-pill.yellow .st-pill-dot { background: var(--warning); box-shadow: 0 0 7px rgba(242,192,99,0.6); }
+.st-pill.red    .st-pill-dot { background: var(--danger);  box-shadow: 0 0 7px rgba(255,138,138,0.6); }
+.st-pill.grey   .st-pill-dot { background: var(--text-quaternary); }
+
+.st-err { background: rgba(255,107,107,0.08); border: 1px solid rgba(255,107,107,0.28); color: var(--danger); padding: 10px 12px; border-radius: 10px; font-size: 11.5px; font-family: var(--font-mono); margin-bottom: 14px; }
+
+/* ── Chart ── */
+.chart-wrap { position: relative; overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
+.chart-wrap svg { display: block; width: 100%; min-width: 320px; }
+.chart-hint { font-size: 10.5px; color: var(--text-quaternary); font-family: var(--font-mono); margin-top: 8px; letter-spacing: 0.04em; }
+
+/* ── Activity cards ── */
+.act-list { display: flex; flex-direction: column; gap: 8px; }
+.act-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px; border-radius: 12px;
+  background: var(--bg-secondary); border: 1px solid var(--border-soft);
+}
+.act-emoji { font-size: 22px; flex-shrink: 0; width: 32px; text-align: center; }
+.act-body { flex: 1; min-width: 0; }
+.act-name { font-size: 14px; font-weight: 700; color: var(--text-primary); line-height: 1.2; }
+.act-meta { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; font-family: var(--font-mono); }
+.act-badge {
+  flex-shrink: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+  padding: 4px 9px; border-radius: 999px; border: 1px solid;
+}
+.act-badge.up   { color: var(--danger);  border-color: rgba(255,138,138,0.40); background: rgba(255,138,138,0.08); }
+.act-badge.down { color: var(--success); border-color: rgba(107,227,164,0.40); background: rgba(107,227,164,0.08); }
+.act-badge.base { color: var(--warning); border-color: rgba(242,192,99,0.40);  background: rgba(242,192,99,0.08); }
+
+/* ── Coach ── */
+.coach-verdict {
+  padding: 16px 18px 14px;
+  border-radius: 14px;
+  border-left: 2px solid rgba(255,255,255,0.28);
+  background: rgba(255,255,255,0.025);
+  margin-bottom: 16px;
+}
+.coach-badge {
+  display: inline-block; font-size: 9.5px; font-weight: 800; padding: 3px 9px;
+  border-radius: 999px; letter-spacing: 0.14em; text-transform: uppercase; border: 1px solid;
+  margin-bottom: 10px;
+}
+.coach-badge.green  { color: var(--success); border-color: rgba(107,227,164,0.50); background: rgba(107,227,164,0.10); }
+.coach-badge.yellow { color: var(--warning); border-color: rgba(242,192,99,0.50);  background: rgba(242,192,99,0.10); }
+.coach-badge.red    { color: var(--danger);  border-color: rgba(255,138,138,0.50); background: rgba(255,138,138,0.10); }
+.coach-headline { font-size: 15px; font-weight: 600; color: var(--text-primary); line-height: 1.5; }
+
+.coach-block { margin-top: 16px; }
+.coach-block-title { font-size: 10.5px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 10px; font-family: var(--font-mono); }
+.coach-line { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 7px; }
+.coach-dot { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; margin-top: 7px; }
+.coach-dot.g { background: var(--success); }
+.coach-dot.y { background: var(--warning); }
+.coach-dot.r { background: var(--danger); }
+.coach-dot.w { background: var(--text-quaternary); }
+
+.coach-recs { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.coach-rec {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 11px 14px; border-radius: 10px;
+  background: rgba(255,255,255,0.025); border: 1px solid var(--border-soft);
+  font-size: 13px; color: var(--text-secondary); line-height: 1.45;
+}
+.coach-rec-icon { font-size: 16px; flex-shrink: 0; width: 22px; text-align: center; }
+
+@media (max-width: 600px) {
+  main { padding: max(40px, env(safe-area-inset-top)) 16px 80px; }
+  .card { padding: 18px 16px; }
+}
+</style>
+</head>
+<body>
+<main>
+  <h1 class="dash-title">Stress</h1>
+
+  <!-- ── Disconnected ── -->
+  <div id="stDisc" class="card">
+    <div class="st-disc">
+      <div class="st-disc-icon">🧠</div>
+      <div class="st-disc-title">Not connected</div>
+      <div class="st-disc-sub">Connect WHOOP to see your stress timeline, activity impact, and a personal stress analysis.</div>
+      <button id="stConnectBtn" class="st-connect-btn" type="button">Connect WHOOP</button>
+    </div>
+  </div>
+
+  <!-- ── Connected ── -->
+  <div id="stConn" style="display:none">
+
+    <!-- Header row -->
+    <div class="st-top">
+      <div class="st-brand">
+        <span class="st-brand-mark">W</span>
+        <span class="st-brand-text">WHOOP</span>
+      </div>
+      <div class="st-actions">
+        <span id="stUpdated" class="st-updated"></span>
+        <button id="stRefresh" class="st-refresh" type="button" aria-label="Refresh">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M23 4v6h-6"/><path d="M20.49 15A9 9 0 1 1 5.64 5.64L23 10"/>
+          </svg>
+        </button>
+        <button id="stDisconnectBtn" class="st-disconnect" type="button">Disconnect</button>
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div id="stErr" class="st-err" style="display:none"></div>
+
+    <!-- Pills -->
+    <div id="stPills" class="st-pills"></div>
+
+    <!-- ── 1. STRESS TIMELINE ── -->
+    <div class="section-title">Stress Timeline · Today</div>
+    <div class="card">
+      <div class="chart-wrap">
+        <svg id="stChart" viewBox="0 0 600 200" preserveAspectRatio="none" aria-label="Stress timeline chart"></svg>
+      </div>
+      <div class="chart-hint" id="stChartHint"></div>
+    </div>
+
+    <!-- ── 2. ACTIVITY IMPACT ── -->
+    <div class="section-title" style="margin-top:24px">Activity Impact</div>
+    <div class="card">
+      <div id="stActivities" class="act-list"></div>
+    </div>
+
+    <!-- ── 3. STRESS COACH ── -->
+    <div class="section-title" style="margin-top:24px">Personal Stress Coach</div>
+    <div class="card" id="stCoach"></div>
+
+  </div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ─── WHOOP Auth (same pattern as health.html) ─── */
+  const KEY        = 'whoop_tokens_v1';
+  const CLIENT_ID  = 'b61ab5c8-3f09-41b9-8e06-09ae9b82349b';
+  const REDIRECT   = window.location.origin + '/api/whoop-callback';
+  const SCOPES     = 'read:recovery read:sleep read:workout read:cycles read:profile read:body_measurement offline';
+
+  function load()  { try { return JSON.parse(localStorage.getItem(KEY)); }  catch { return null; } }
+  function save(t) { try { localStorage.setItem(KEY, JSON.stringify(t)); }  catch {} }
+  function wipe()  { try { localStorage.removeItem(KEY); }                  catch {} }
+
+  // Capture tokens from hash after OAuth redirect
+  if (location.hash && location.hash.includes('whoop_access')) {
+    const h = new URLSearchParams(location.hash.slice(1));
+    const access = h.get('whoop_access'), refresh = h.get('whoop_refresh');
+    const expires = Number(h.get('whoop_expires')) || Date.now() + 3500e3;
+    if (access) { save({ access, refresh, expires }); history.replaceState(null, '', location.pathname + location.search); }
+  }
+
+  const $ = id => document.getElementById(id);
+
+  /* ─── Connect / Disconnect ─── */
+  $('stConnectBtn').addEventListener('click', () => {
+    location.href = 'https://api.prod.whoop.com/oauth/oauth2/auth'
+      + '?client_id='    + encodeURIComponent(CLIENT_ID)
+      + '&redirect_uri=' + encodeURIComponent(REDIRECT)
+      + '&response_type=code'
+      + '&scope='        + encodeURIComponent(SCOPES)
+      + '&state='        + Math.random().toString(36).slice(2);
+  });
+  $('stDisconnectBtn').addEventListener('click', () => { wipe(); render(); });
+  $('stRefresh').addEventListener('click', async e => {
+    const btn = e.currentTarget; btn.classList.add('spin');
+    try { await loadData(); } finally { setTimeout(() => btn.classList.remove('spin'), 600); }
+  });
+
+  /* ─── Token refresh ─── */
+  async function refreshTok(t) {
+    if (!t.refresh) return null;
+    try {
+      const r = await fetch('/api/whoop-refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: t.refresh }) });
+      const j = await r.json();
+      if (j.access_token) { const next = { access: j.access_token, refresh: j.refresh_token || t.refresh, expires: Date.now() + (j.expires_in || 3500) * 1000 }; save(next); return next; }
+    } catch {}
+    return null;
+  }
+
+  /* ─── API proxy ─── */
+  async function whFetch(path, t) {
+    const [p, qs] = path.split('?');
+    const params = new URLSearchParams(qs || ''); params.set('path', p);
+    const r = await fetch('/api/whoop-data?' + params.toString(), { headers: { 'Authorization': 'Bearer ' + t.access, 'Accept': 'application/json' } });
+    if (r.status === 401) { const n = await refreshTok(t); if (n) return whFetch(path, n); throw new Error('unauthorized — reconnect'); }
+    if (!r.ok) throw new Error('WHOOP ' + r.status + ': ' + await r.text());
+    return r.json();
+  }
+
+  /* ─── Helpers ─── */
+  function lerp(a, b, t) { return a + (b - a) * Math.max(0, Math.min(1, t)); }
+  function posMod(a, b) { return ((a % b) + b) % b; }
+  function toHour(iso) { const d = new Date(iso); return d.getHours() + d.getMinutes() / 60; }
+  function inWindow(h, s, e) { return s <= e ? (h >= s && h <= e) : (h >= s || h <= e); }
+  function fmtTime(iso) { return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }); }
+  function fmtDur(ms) { const m = Math.round(ms / 60000), h = Math.floor(m / 60); return h > 0 ? h + 'h ' + String(m % 60).padStart(2, '0') + 'm' : m + 'm'; }
+
+  const SPORTS = {
+    '-1': ['⚡','Activity'],  0: ['⚡','Activity'],    1: ['🏃','Running'],
+     16:  ['⚾','Baseball'],  17: ['🏀','Basketball'], 18: ['🚣','Rowing'],
+     24:  ['🧘','Meditation'],33: ['🧘','Yoga'],       44: ['🥾','Hiking'],
+     45:  ['🤸','Pilates'],  63: ['🏋️','Functional Fitness'], 64: ['🏈','Football'],
+     70:  ['⚽','Soccer'],   74: ['🏊','Swimming'],    87: ['🎾','Tennis'],
+     88:  ['🏋️','Powerlifting'], 91: ['🏋️','Weightlifting'], 103: ['🚴','Cycling'],
+    108:  ['🥊','Boxing'],   119: ['🥋','MMA'],        126: ['🚴','Cycling'],
+    127:  ['🚵','Mountain Biking'], 128: ['🏋️','CrossFit'], 161: ['🧗','Climbing'],
+    164:  ['🔥','HIIT'],     166: ['🏃','Elliptical'], 167: ['🪜','Stairmaster'],
+    168:  ['🤸','Stretching'],
+  };
+  function sport(id) { return SPORTS[String(id)] || ['⚡', 'Activity']; }
+
+  /* ─── Stress curve (48 points = every 30 min) ─── */
+  function buildCurve(recScore, sleepRec, workouts) {
+    const N    = 48;
+    const base = recScore != null ? Math.round(lerp(72, 20, recScore / 100)) : 48;
+    const pts  = new Array(N).fill(base);
+
+    // Sleep dip: sin arc from base → ~10 → base
+    if (sleepRec && sleepRec.start && sleepRec.end) {
+      const sH = toHour(sleepRec.start), eH = toHour(sleepRec.end);
+      const dur = posMod(eH - sH, 24) || 1;
+      for (let i = 0; i < N; i++) {
+        const h = i * 0.5;
+        if (inWindow(h, sH, eH)) {
+          const t   = posMod(h - sH, 24) / dur;
+          const dip = Math.sin(t * Math.PI);
+          pts[i]    = Math.max(6, Math.round(lerp(base, 10, dip * 0.88)));
+        }
+      }
+    }
+
+    // Workout spikes + 2-hour post-workout decay
+    workouts.forEach(w => {
+      if (!w.start) return;
+      const strain = (w.score && w.score.strain) || 0;
+      const sH     = toHour(w.start);
+      const eH     = w.end ? toHour(w.end) : sH + 1;
+      const dur    = Math.max(0.25, posMod(eH - sH, 24));
+      const spike  = Math.min(96, base + Math.round(strain * 3.8));
+
+      for (let i = 0; i < N; i++) {
+        const h = i * 0.5;
+        if (inWindow(h, sH, eH)) {
+          const t = posMod(h - sH, 24) / dur;
+          pts[i] = Math.max(pts[i], Math.round(lerp(base, spike, Math.min(1, t * 5))));
+        } else {
+          const since = posMod(h - eH, 24);
+          if (since <= 2) {
+            const decay = 1 - since / 2;
+            pts[i] = Math.max(pts[i], Math.round(lerp(base, spike, decay * 0.85)));
+          }
+        }
+      }
+    });
+
+    // Mask future points
+    const nowH = new Date().getHours() + new Date().getMinutes() / 60;
+    for (let i = 0; i < N; i++) { if (i / 2 > nowH + 0.25) pts[i] = null; }
+
+    return pts;
+  }
+
+  /* ─── SVG Chart ─── */
+  function renderChart(pts, workouts, sleepRec) {
+    const svg = $('stChart');
+    const W = 600, H = 200, ML = 44, MR = 12, MT = 18, MB = 30;
+    const cw = W - ML - MR, ch = H - MT - MB;
+    const xFn = i  => ML + (i  / (pts.length - 1)) * cw;
+    const yFn = v  => MT + ch - (v / 100) * ch;
+
+    const valid = pts.filter(v => v != null);
+    if (!valid.length) { svg.innerHTML = ''; return; }
+    const maxV = Math.max(...valid);
+    const lineColor = maxV >= 70 ? '#FF8A8A' : maxV >= 44 ? '#F2C063' : '#6BE3A4';
+    const gradId = 'stGrad';
+
+    // Build path segments (split on nulls)
+    const segs = [];
+    let cur = [];
+    pts.forEach((v, i) => {
+      if (v != null) cur.push([i, v]);
+      else if (cur.length) { segs.push(cur); cur = []; }
+    });
+    if (cur.length) segs.push(cur);
+
+    let linePath = '', fillPath = '';
+    segs.forEach(seg => {
+      if (seg.length < 2) return;
+      let d = `M ${xFn(seg[0][0]).toFixed(1)} ${yFn(seg[0][1]).toFixed(1)}`;
+      for (let j = 0; j < seg.length - 1; j++) {
+        const x0 = xFn(seg[j][0]),     y0 = yFn(seg[j][1]);
+        const x1 = xFn(seg[j+1][0]),   y1 = yFn(seg[j+1][1]);
+        const cpx = ((x0 + x1) / 2).toFixed(1);
+        d += ` C ${cpx} ${y0.toFixed(1)}, ${cpx} ${y1.toFixed(1)}, ${x1.toFixed(1)} ${y1.toFixed(1)}`;
+      }
+      linePath += d + ' ';
+      const bot = (MT + ch).toFixed(1);
+      fillPath += d + ` L ${xFn(seg[seg.length-1][0]).toFixed(1)} ${bot} L ${xFn(seg[0][0]).toFixed(1)} ${bot} Z `;
+    });
+
+    // Grid Y lines at 25, 50, 75
+    let gridLines = '';
+    [25, 50, 75].forEach(v => {
+      const y = yFn(v).toFixed(1);
+      gridLines += `<line x1="${ML}" y1="${y}" x2="${W - MR}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>`;
+      gridLines += `<text x="${(ML - 6).toFixed(1)}" y="${(+y + 4).toFixed(1)}" text-anchor="end" font-size="9" fill="rgba(255,255,255,0.22)" font-family="ui-monospace,monospace">${v}</text>`;
+    });
+    // 0 and 100 labels
+    gridLines += `<text x="${(ML - 6).toFixed(1)}" y="${(yFn(0) + 4).toFixed(1)}" text-anchor="end" font-size="9" fill="rgba(255,255,255,0.22)" font-family="ui-monospace,monospace">0</text>`;
+    gridLines += `<text x="${(ML - 6).toFixed(1)}" y="${(yFn(100) + 4).toFixed(1)}" text-anchor="end" font-size="9" fill="rgba(255,255,255,0.22)" font-family="ui-monospace,monospace">100</text>`;
+
+    // X axis labels: 12AM, 4AM, 8AM, 12PM, 4PM, 8PM
+    const xLabels = [[0,'12AM'],[8,'8AM'],[16,'4PM'],[24,'12AM'],[32,'4PM'],[40,'8PM'],[47,'']];
+    let xLabelsSvg = '';
+    // Actually cleaner: every 6 hours
+    [[0,'12 AM'],[12,'6 AM'],[24,'12 PM'],[36,'6 PM'],[47,'']].forEach(([i, lbl]) => {
+      const x = xFn(i).toFixed(1);
+      const y = (MT + ch + 16).toFixed(1);
+      xLabelsSvg += `<text x="${x}" y="${y}" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.28)" font-family="ui-monospace,monospace">${lbl}</text>`;
+    });
+
+    // Activity markers on the chart
+    let markers = '';
+    const nowH = new Date().getHours() + new Date().getMinutes() / 60;
+    workouts.forEach(w => {
+      if (!w.start || !w.score) return;
+      const sH  = toHour(w.start);
+      const eH  = w.end ? toHour(w.end) : sH + 1;
+      // find peak index during workout
+      let peakI = -1, peakV = -Infinity;
+      for (let i = 0; i < pts.length; i++) {
+        const h = i * 0.5;
+        if (inWindow(h, sH, eH) && pts[i] != null && pts[i] > peakV) { peakV = pts[i]; peakI = i; }
+      }
+      if (peakI >= 0) {
+        const px = xFn(peakI).toFixed(1), py = yFn(peakV).toFixed(1);
+        const [, sName] = sport(w.sport_id);
+        markers += `<circle cx="${px}" cy="${py}" r="5" fill="${lineColor}" opacity="0.9"/>`;
+        markers += `<circle cx="${px}" cy="${py}" r="9" fill="none" stroke="${lineColor}" stroke-width="1" opacity="0.35"/>`;
+      }
+    });
+    if (sleepRec && sleepRec.start) {
+      const midH  = (toHour(sleepRec.start) + toHour(sleepRec.end)) / 2;
+      const midI  = Math.round(midH * 2);
+      const midV  = pts[Math.min(midI, pts.length-1)];
+      if (midV != null) {
+        const px = xFn(midI).toFixed(1), py = yFn(midV).toFixed(1);
+        markers += `<circle cx="${px}" cy="${py}" r="5" fill="#60A5FA" opacity="0.85"/>`;
+      }
+    }
+
+    // "Now" vertical line
+    const nowI = Math.min(47, nowH * 2);
+    const nowX = xFn(nowI).toFixed(1);
+
+    svg.innerHTML = `
+      <defs>
+        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${lineColor}" stop-opacity="0.28"/>
+          <stop offset="100%" stop-color="${lineColor}" stop-opacity="0.0"/>
+        </linearGradient>
+      </defs>
+      ${gridLines}
+      <path d="${fillPath}" fill="url(#${gradId})"/>
+      <path d="${linePath}" fill="none" stroke="${lineColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      ${markers}
+      <line x1="${nowX}" y1="${MT}" x2="${nowX}" y2="${MT + ch}" stroke="rgba(255,255,255,0.18)" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="${nowX}" y="${MT - 4}" text-anchor="middle" font-size="8.5" fill="rgba(255,255,255,0.38)" font-family="ui-monospace,monospace">NOW</text>
+      ${xLabelsSvg}
+    `;
+
+    // Legend hint
+    const peakLabel = maxV >= 70 ? 'high-stress day' : maxV >= 44 ? 'moderate stress' : 'low-stress day';
+    $('stChartHint').textContent = `Peak: ${Math.round(maxV)}/100 · ${peakLabel} · colored dots mark activities`;
+  }
+
+  /* ─── Activity cards ─── */
+  function renderActivities(workouts, sleepRec, pts) {
+    const el = $('stActivities');
+    const rows = [];
+
+    // Sleep first
+    if (sleepRec && sleepRec.start && sleepRec.end) {
+      const dur  = new Date(sleepRec.end) - new Date(sleepRec.start);
+      const perf = sleepRec.score && sleepRec.score.sleep_performance_percentage
+        ? Math.round(sleepRec.score.sleep_performance_percentage) : null;
+      rows.push({
+        emoji: '💤', name: 'Sleep',
+        meta:  fmtTime(sleepRec.start) + ' → ' + fmtTime(sleepRec.end) + '  ·  ' + fmtDur(dur) + (perf != null ? '  ·  ' + perf + '% performance' : ''),
+        impact: 'down', label: '↓ Stress relief',
+        order: new Date(sleepRec.start).getTime(),
+      });
+    }
+
+    workouts.forEach(w => {
+      const [emoji, name] = sport(w.sport_id);
+      const dur   = w.end ? new Date(w.end) - new Date(w.start) : 0;
+      const strain = (w.score && w.score.strain != null) ? w.score.strain.toFixed(1) : '—';
+      const avgHR  = (w.score && w.score.average_heart_rate) ? w.score.average_heart_rate + ' bpm avg' : '';
+      const meta   = fmtTime(w.start) + (w.end ? ' → ' + fmtTime(w.end) : '') +
+                     (dur ? '  ·  ' + fmtDur(dur) : '') +
+                     '  ·  Strain ' + strain +
+                     (avgHR ? '  ·  ' + avgHR : '');
+      const strainNum = (w.score && w.score.strain) || 0;
+      const impact = strainNum >= 14 ? 'up' : strainNum >= 7 ? 'base' : 'down';
+      const label  = strainNum >= 14 ? '↑ High load' : strainNum >= 7 ? '~ Moderate' : '↓ Light';
+      rows.push({ emoji, name, meta, impact, label, order: new Date(w.start).getTime() });
+    });
+
+    rows.sort((a, b) => a.order - b.order);
+
+    if (!rows.length) {
+      el.innerHTML = '<div style="font-size:13px;color:var(--text-quaternary);font-style:italic;padding:6px 2px;">No activities logged for today yet.</div>';
+      return;
+    }
+
+    el.innerHTML = rows.map(r => `
+      <div class="act-row">
+        <div class="act-emoji">${r.emoji}</div>
+        <div class="act-body">
+          <div class="act-name">${r.name}</div>
+          <div class="act-meta">${r.meta}</div>
+        </div>
+        <div class="act-badge ${r.impact}">${r.label}</div>
+      </div>
+    `).join('');
+  }
+
+  /* ─── Stress Coach ─── */
+  function renderCoach(recScore, hrv, rhr, strain, sleepPerf, workouts) {
+    const el = $('stCoach');
+    if (recScore == null) { el.innerHTML = '<div style="color:var(--text-tertiary);font-size:13px;">Connect WHOOP and fetch data to see your analysis.</div>'; return; }
+
+    // Verdict
+    let cls, badge, headline;
+    if (recScore >= 67) {
+      cls = 'green'; badge = 'LOW STRESS';
+      headline = 'Your body is primed. Stress systems are well-recovered — take on the hard things today and push into your goals.';
+    } else if (recScore >= 34) {
+      cls = 'yellow'; badge = 'MODERATE STRESS';
+      headline = 'Moderate resilience. You can train and work, but be deliberate — avoid stacking too many stressors today.';
+    } else {
+      cls = 'red'; badge = 'HIGH STRESS';
+      headline = 'Your system is under elevated strain. Rest is the highest-leverage move right now — prioritise sleep, not output.';
+    }
+
+    // Drivers
+    const drivers = [];
+    if (recScore != null) {
+      const c = recScore >= 67 ? 'g' : recScore >= 34 ? 'y' : 'r';
+      drivers.push({ c, text: `Recovery ${recScore}% — ${recScore >= 67 ? 'strong baseline, low physiological stress' : recScore >= 34 ? 'moderate — body still clearing yesterday\'s load' : 'low — accumulated stress not yet resolved'}.` });
+    }
+    if (hrv != null) {
+      const c = hrv >= 60 ? 'g' : hrv >= 40 ? 'y' : 'r';
+      drivers.push({ c, text: `HRV ${hrv} ms — ${hrv >= 60 ? 'nervous system is balanced and resilient' : hrv >= 40 ? 'mild autonomic stress present' : 'elevated nervous system stress, fight-or-flight is activated'}.` });
+    }
+    if (rhr != null) {
+      const c = rhr <= 55 ? 'g' : rhr <= 70 ? 'y' : 'r';
+      drivers.push({ c, text: `Resting HR ${rhr} bpm — ${rhr <= 55 ? 'cardiovascular system is calm and efficient' : rhr <= 70 ? 'slightly elevated — possible fatigue or dehydration' : 'significantly elevated resting HR suggests high physiological stress'}.` });
+    }
+    if (strain != null) {
+      const c = strain < 10 ? 'g' : strain < 16 ? 'y' : 'r';
+      drivers.push({ c, text: `Strain ${strain.toFixed(1)} — ${strain < 10 ? 'light load so far, body has room to work' : strain < 16 ? 'moderate exertion, compound stressors will add up' : 'high physical load — your body is in significant repair mode'}.` });
+    }
+    if (sleepPerf != null) {
+      const c = sleepPerf >= 80 ? 'g' : sleepPerf >= 65 ? 'y' : 'r';
+      drivers.push({ c, text: `Sleep score ${sleepPerf}% — ${sleepPerf >= 80 ? 'good quality sleep, stress cleared effectively overnight' : sleepPerf >= 65 ? 'sub-optimal sleep — partial stress recovery only' : 'poor sleep compounds all stress — this is likely the root cause today'}.` });
+    }
+
+    // Recommendations
+    const recs = [];
+    if (recScore < 34 || (rhr != null && rhr > 70)) {
+      recs.push({ icon: '🛌', text: 'Sleep is the single most powerful stress lever. Aim for bed before 10 PM tonight and protect a full 8-hour window.' });
+    }
+    if (hrv != null && hrv < 40) {
+      recs.push({ icon: '🫁', text: 'Box breathing (4 sec in, 4 hold, 4 out, 4 hold) for 10 minutes lowers cortisol and raises HRV within a single session.' });
+    }
+    if (strain != null && strain >= 14) {
+      recs.push({ icon: '🧊', text: 'Cold exposure (cold shower or ice bath, 2–5 min) post high-strain workout accelerates recovery and reduces inflammatory markers.' });
+    }
+    if (sleepPerf != null && sleepPerf < 70) {
+      recs.push({ icon: '📵', text: 'No screens 60 min before bed. Blue light suppresses melatonin — swap to dim warm lighting or blue-light glasses.' });
+    }
+    if (recScore >= 34 && recScore < 67) {
+      recs.push({ icon: '🚶', text: 'A 20-minute walk after your last meal activates the parasympathetic nervous system and blunts the post-meal cortisol spike.' });
+    }
+    if (recScore >= 67) {
+      recs.push({ icon: '🏋️', text: 'High recovery is your window — schedule your most demanding training session or deepest cognitive work today while stress resilience is peaked.' });
+    }
+    recs.push({ icon: '💧', text: 'Even mild dehydration (1–2%) raises cortisol and suppresses HRV. Aim for 35 ml/kg of body weight in water today.' });
+    recs.push({ icon: '☕', text: 'Caffeine after 12 PM elevates cortisol and suppresses adenosine — cut off coffee intake before noon to protect sleep quality.' });
+
+    const driversHtml = drivers.map(d => `
+      <div class="coach-line">
+        <div class="coach-dot ${d.c}"></div>
+        <div>${d.text}</div>
+      </div>`).join('');
+
+    const recsHtml = recs.slice(0, 5).map(r => `
+      <div class="coach-rec">
+        <div class="coach-rec-icon">${r.icon}</div>
+        <div>${r.text}</div>
+      </div>`).join('');
+
+    el.innerHTML = `
+      <div class="coach-verdict">
+        <div class="coach-badge ${cls}">${badge}</div>
+        <div class="coach-headline">${headline}</div>
+      </div>
+      <div class="coach-block">
+        <div class="coach-block-title">What's driving your stress</div>
+        ${driversHtml}
+      </div>
+      <div class="coach-block" style="margin-top:20px">
+        <div class="coach-block-title">How to lower it</div>
+        <div class="coach-recs">${recsHtml}</div>
+      </div>
+    `;
+  }
+
+  /* ─── Metric Pills ─── */
+  function renderPills(recScore, hrv, rhr, strain) {
+    const el = $('stPills');
+    const pills = [];
+    if (recScore != null) {
+      const c = recScore >= 67 ? 'green' : recScore >= 34 ? 'yellow' : 'red';
+      pills.push(`<span class="st-pill ${c}"><span class="st-pill-dot"></span>Recovery ${recScore}%</span>`);
+    }
+    if (hrv != null) {
+      const c = hrv >= 60 ? 'green' : hrv >= 40 ? 'yellow' : 'red';
+      pills.push(`<span class="st-pill ${c}"><span class="st-pill-dot"></span>HRV ${hrv} ms</span>`);
+    }
+    if (rhr != null) {
+      const c = rhr <= 55 ? 'green' : rhr <= 70 ? 'yellow' : 'red';
+      pills.push(`<span class="st-pill ${c}"><span class="st-pill-dot"></span>RHR ${rhr} bpm</span>`);
+    }
+    if (strain != null) {
+      const c = strain < 10 ? 'green' : strain < 16 ? 'yellow' : 'red';
+      pills.push(`<span class="st-pill ${c}"><span class="st-pill-dot"></span>Strain ${strain.toFixed(1)}</span>`);
+    }
+    el.innerHTML = pills.join('');
+  }
+
+  /* ─── Load Data ─── */
+  async function loadData() {
+    let t = load(); if (!t) return;
+    if (t.expires && Date.now() > t.expires - 60000) { const n = await refreshTok(t); if (n) t = n; }
+
+    const errEl = $('stErr');
+    errEl.style.display = 'none';
+
+    try {
+      const [rec, sleep, cycle, workoutsData] = await Promise.all([
+        whFetch('/recovery?limit=1', t).catch(e => { console.error('[stress] recovery', e.message); return null; }),
+        whFetch('/activity/sleep?limit=1', t).catch(e => { console.error('[stress] sleep', e.message); return null; }),
+        whFetch('/cycle?limit=1', t).catch(e => { console.error('[stress] cycle', e.message); return null; }),
+        whFetch('/activity/workout?limit=10', t).catch(e => { console.error('[stress] workouts', e.message); return null; }),
+      ]);
+
+      // Extract values
+      let recScore = null, hrv = null, rhr = null;
+      const r0 = rec && rec.records && rec.records[0];
+      if (r0 && r0.score) {
+        recScore = Math.round(r0.score.recovery_score || 0);
+        hrv      = r0.score.hrv_rmssd_milli != null ? Math.round(r0.score.hrv_rmssd_milli) : null;
+        rhr      = r0.score.resting_heart_rate != null ? Math.round(r0.score.resting_heart_rate) : null;
+      }
+
+      let strain = null;
+      const c0 = cycle && cycle.records && cycle.records[0];
+      if (c0 && c0.score && c0.score.strain != null) strain = c0.score.strain;
+
+      const sleepRec = sleep && sleep.records && sleep.records[0];
+      let sleepPerf  = null;
+      if (sleepRec && sleepRec.score) sleepPerf = Math.round(sleepRec.score.sleep_performance_percentage || 0);
+
+      // Filter workouts to last 24h
+      const cutoff   = Date.now() - 26 * 3600 * 1000;
+      const workouts = (workoutsData && workoutsData.records || []).filter(w => new Date(w.start) >= cutoff);
+
+      // Render
+      renderPills(recScore, hrv, rhr, strain);
+      const pts = buildCurve(recScore, sleepRec, workouts);
+      renderChart(pts, workouts, sleepRec);
+      renderActivities(workouts, sleepRec, pts);
+      renderCoach(recScore, hrv, rhr, strain, sleepPerf, workouts);
+
+      $('stUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+    } catch (e) {
+      errEl.textContent = e.message || String(e);
+      errEl.style.display = 'block';
+    }
+  }
+
+  /* ─── View toggle ─── */
+  function render() {
+    const t = load();
+    if (t && t.access) {
+      $('stDisc').style.display = 'none';
+      $('stConn').style.display = '';
+      loadData();
+    } else {
+      $('stDisc').style.display = '';
+      $('stConn').style.display = 'none';
+    }
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>
