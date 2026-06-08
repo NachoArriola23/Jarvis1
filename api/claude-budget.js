@@ -5,8 +5,8 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'method not allowed' });
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured in Vercel env vars.' });
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: 'GROQ_API_KEY not configured in Vercel env vars.' });
 
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
@@ -57,27 +57,30 @@ Rules:
 - reasoning ≤ 12 words; goal insight ≤ 20 words; summary 2-3 sentences, warm and personal`;
 
   try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
+        'Authorization': 'Bearer ' + apiKey,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: 'llama3-70b-8192',
         max_tokens: 1600,
-        messages: [{ role: 'user', content: userMsg }],
+        temperature: 0.4,
+        messages: [
+          { role: 'system', content: 'You are a sharp personal finance advisor. Always respond with valid JSON only — no markdown, no commentary outside the JSON object.' },
+          { role: 'user',   content: userMsg },
+        ],
       }),
     });
 
     const raw = await r.text();
-    if (!r.ok) return res.status(500).json({ error: 'Claude error: ' + raw });
+    if (!r.ok) return res.status(500).json({ error: 'Groq error: ' + raw });
 
     const data = JSON.parse(raw);
-    const text = data.content && data.content[0] && data.content[0].text || '';
+    const text = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content || '';
     const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return res.status(500).json({ error: 'Could not parse JSON from Claude response', raw: text.slice(0, 400) });
+    if (!match) return res.status(500).json({ error: 'Could not parse JSON from Groq response', raw: text.slice(0, 400) });
 
     const plan = JSON.parse(match[0]);
     return res.status(200).json(plan);
